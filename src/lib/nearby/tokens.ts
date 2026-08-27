@@ -18,6 +18,8 @@ const TOKEN_TTL_MS = 10 * 60 * 1000;
 const LOCAL_DEMO_SECRET = "sf-contacts-nearby-local-demo-secret";
 const MISSING_SECRET_MESSAGE =
   "Set NEARBY_TOKEN_SECRET before using nearby sharing in production.";
+// Demo-scoped replay state. A real multi-instance/native proximity detector
+// should replace this with an atomic durable nonce claim store.
 const usedNonces = new Map<string, number>();
 const pendingNonces = new Map<string, number>();
 
