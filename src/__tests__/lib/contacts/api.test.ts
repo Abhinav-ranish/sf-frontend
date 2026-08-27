@@ -22,13 +22,10 @@ const INPUT: ContactInput = {
   last_name: "Hopper",
   email: "grace@example.com",
   phone: null,
+  photo: null,
   company: null,
   job_title: null,
-  address: null,
-  city: null,
-  state: null,
-  postal_code: null,
-  country: null,
+  addresses: [],
   notes: null,
 };
 
@@ -151,11 +148,13 @@ describe("error translation", () => {
         detail: [
           { loc: ["body", "email"], msg: "value is not a valid email address" },
           { loc: ["body", "first_name"], msg: "String should have at least 1 character" },
+          { loc: ["body", "addresses", 0, "address"], msg: "Address must include detail" },
         ],
       }),
     );
 
     expect(toFieldErrors(error)).toEqual({
+      addresses: "Address must include detail",
       email: "value is not a valid email address",
       first_name: "String should have at least 1 character",
     });
