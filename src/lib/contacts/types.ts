@@ -35,8 +35,8 @@ export interface Contact {
   full_name: string;
 }
 
-/** `ContactListItem` — a lightweight row returned by `GET /api/v1/contacts`. Keeps `photo` so list avatars render. */
-export type ContactListItem = Omit<Contact, "addresses" | "notes">;
+/** `ContactListItem` — a lightweight row returned by `GET /api/v1/contacts`. */
+export type ContactListItem = Omit<Contact, "photo" | "addresses" | "notes">;
 
 /** Every editable field, i.e. `ContactCreate` / `ContactReplace`. */
 export type ContactInput = Omit<

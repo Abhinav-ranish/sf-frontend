@@ -46,7 +46,6 @@ export function makeListItem(contact: Contact): ContactListItem {
     last_name: contact.last_name,
     email: contact.email,
     phone: contact.phone,
-    photo: contact.photo,
     company: contact.company,
     job_title: contact.job_title,
     created_at: contact.created_at,

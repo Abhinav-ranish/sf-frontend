@@ -72,8 +72,8 @@ Photos:
 - Accepted file types: JPEG, PNG, and WebP.
 - Maximum decoded image size: 512 KB.
 - Existing photos are preserved while editing unless the user removes them.
-- Saved photos render as circular avatars on detail and edit views; contacts
-  without photos show initials.
+- Saved photos render as circular avatars on detail and edit views; list rows
+  use initials to keep paginated responses lightweight.
 
 Addresses:
 
