@@ -35,6 +35,9 @@ export interface Contact {
   full_name: string;
 }
 
+/** `ContactListItem` — a lightweight row returned by `GET /api/v1/contacts`. */
+export type ContactListItem = Omit<Contact, "photo" | "addresses" | "notes">;
+
 /** Every editable field, i.e. `ContactCreate` / `ContactReplace`. */
 export type ContactInput = Omit<
   Contact,
@@ -66,7 +69,7 @@ export type ContactFormValues = Omit<ContactInput, "addresses"> & {
 
 /** `ContactPage` — one page of contacts plus the totals needed to paginate. */
 export interface ContactPage {
-  items: Contact[];
+  items: ContactListItem[];
   total: number;
   limit: number;
   offset: number;

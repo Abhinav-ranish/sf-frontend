@@ -69,15 +69,20 @@ function PhotoField({
   contact,
   error,
   onLocalErrorChange,
+  onReadingChange,
 }: {
   value: string;
   contact?: Contact;
   error?: string;
   onLocalErrorChange: (message: string | null) => void;
+  onReadingChange: (isReading: boolean) => void;
 }) {
   const [photo, setPhoto] = useState(value);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [isReading, setIsReading] = useState(false);
+  const [editedSinceServerError, setEditedSinceServerError] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const readSeq = useRef(0);
 
   function clearFileInput() {
     if (fileRef.current) fileRef.current.value = "";
@@ -88,30 +93,54 @@ function PhotoField({
     onLocalErrorChange(message);
   }
 
+  function setPhotoReading(nextIsReading: boolean) {
+    setIsReading(nextIsReading);
+    onReadingChange(nextIsReading);
+  }
+
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0];
     if (!file) return;
 
     if (!PHOTO_MIME_TYPES.includes(file.type as (typeof PHOTO_MIME_TYPES)[number])) {
+      readSeq.current += 1;
+      setPhotoReading(false);
       setPhotoError("Choose a JPEG, PNG, or WebP image.");
       clearFileInput();
       return;
     }
 
     if (file.size > MAX_PHOTO_BYTES) {
+      readSeq.current += 1;
+      setPhotoReading(false);
       setPhotoError(`Photo must be ${MAX_PHOTO_LABEL} or smaller.`);
       clearFileInput();
       return;
     }
 
+    const seq = ++readSeq.current;
     const reader = new FileReader();
-    reader.onerror = () => setPhotoError("Could not read that image.");
-    reader.onload = () => {
-      setPhoto(String(reader.result ?? ""));
-      setPhotoError(null);
+    reader.onerror = () => {
+      if (seq !== readSeq.current) return;
+      setPhotoReading(false);
+      setPhotoError("Could not read that image.");
       clearFileInput();
     };
-    setPhoto("");
+    reader.onload = () => {
+      if (seq !== readSeq.current) return;
+      if (typeof reader.result !== "string" || !reader.result) {
+        setPhotoReading(false);
+        setPhotoError("Could not read that image.");
+        clearFileInput();
+        return;
+      }
+      setPhoto(reader.result);
+      setPhotoReading(false);
+      setPhotoError(null);
+      setEditedSinceServerError(true);
+      clearFileInput();
+    };
+    setPhotoReading(true);
     setPhotoError(null);
     reader.readAsDataURL(file);
   }
@@ -122,17 +151,22 @@ function PhotoField({
     email: contact?.email ?? "preview@example.com",
     photo,
   };
-  const message = localError ?? error;
+  const message = localError ?? (editedSinceServerError ? null : error);
+  const descriptionId = message
+    ? "field-photo-error"
+    : isReading
+      ? "field-photo-status"
+      : undefined;
 
   return (
-    <fieldset className="space-y-4">
+    <fieldset className="space-y-4" aria-busy={isReading}>
       <legend className="sr-only">Photo</legend>
       <div className="border-b border-hairline pb-2">
         <h2 className="font-display text-sm font-semibold text-foreground">
           Photo
         </h2>
         <p className="text-[13px] text-muted-foreground">
-          Optional profile image shown in the contact list and detail view.
+          Optional profile image for this contact.
         </p>
       </div>
 
@@ -156,8 +190,9 @@ function PhotoField({
             type="file"
             accept={PHOTO_MIME_TYPES.join(",")}
             onChange={handleFileChange}
+            disabled={isReading}
             aria-invalid={message ? true : undefined}
-            aria-describedby={message ? "field-photo-error" : undefined}
+            aria-describedby={descriptionId}
             className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-2 file:text-sm file:font-medium file:text-secondary-foreground hover:file:bg-secondary/70"
           />
           <div className="flex flex-wrap items-center gap-2">
@@ -170,9 +205,13 @@ function PhotoField({
                 type="button"
                 variant="ghost"
                 size="sm"
+                disabled={isReading}
                 onClick={() => {
+                  readSeq.current += 1;
+                  setPhotoReading(false);
                   setPhoto("");
                   setPhotoError(null);
+                  setEditedSinceServerError(true);
                   clearFileInput();
                 }}
               >
@@ -184,6 +223,11 @@ function PhotoField({
           {message ? (
             <p id="field-photo-error" role="alert" className="text-[13px] text-destructive">
               {message}
+            </p>
+          ) : null}
+          {isReading ? (
+            <p id="field-photo-status" role="status" className="text-[13px] text-muted-foreground">
+              Preparing image…
             </p>
           ) : null}
         </div>
@@ -331,6 +375,7 @@ export default function ContactForm({
 }) {
   const [state, formAction] = useActionState(action, EMPTY_FORM_STATE);
   const [photoLocalError, setPhotoLocalError] = useState<string | null>(null);
+  const [photoIsReading, setPhotoIsReading] = useState(false);
 
   function valueFor(name: keyof ContactFormValues): string {
     const submitted = state.values?.[name];
@@ -369,6 +414,7 @@ export default function ContactForm({
         contact={contact}
         error={state.fieldErrors?.photo}
         onLocalErrorChange={setPhotoLocalError}
+        onReadingChange={setPhotoIsReading}
       />
 
       {CONTACT_FIELD_GROUPS.map((group) => (
@@ -408,7 +454,10 @@ export default function ContactForm({
       ))}
 
       <div className="flex items-center gap-2 border-t border-hairline pt-4">
-        <SubmitButton label={submitLabel} disabled={Boolean(photoLocalError)} />
+        <SubmitButton
+          label={submitLabel}
+          disabled={Boolean(photoLocalError) || photoIsReading}
+        />
         <Link href={cancelHref} className={buttonClasses("secondary")}>
           Cancel
         </Link>

@@ -34,6 +34,7 @@ describe("listContacts", () => {
     const page = await listContacts();
     expect(page.total).toBe(2);
     expect(page.items).toHaveLength(2);
+    expect(page.items[0]).not.toHaveProperty("photo");
   });
 
   it("forwards search, paging and sorting as query params", async () => {

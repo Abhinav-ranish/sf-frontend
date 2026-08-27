@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import ContactForm from "@/components/contacts/ContactForm";
 import { makeContact } from "../mocks/handlers";
@@ -39,6 +39,65 @@ describe("ContactForm", () => {
     // Nulls become empty inputs rather than the string "null".
     expect(screen.getByLabelText(/street address/i)).toHaveValue("");
     expect(container.querySelector('input[name="photo"]')).toHaveValue(PHOTO);
+  });
+
+  it("preserves the current photo and blocks submit while reading a replacement", async () => {
+    const originalFileReader = global.FileReader;
+    const readers: Array<{
+      result: string | ArrayBuffer | null;
+      onload: ((this: FileReader, event: ProgressEvent<FileReader>) => void) | null;
+      onerror: ((this: FileReader, event: ProgressEvent<FileReader>) => void) | null;
+      readAsDataURL: jest.Mock;
+    }> = [];
+
+    class MockFileReader {
+      result: string | ArrayBuffer | null = null;
+      onload: ((this: FileReader, event: ProgressEvent<FileReader>) => void) | null = null;
+      onerror: ((this: FileReader, event: ProgressEvent<FileReader>) => void) | null = null;
+      readAsDataURL = jest.fn();
+
+      constructor() {
+        readers.push(this);
+      }
+    }
+
+    Object.defineProperty(global, "FileReader", {
+      configurable: true,
+      writable: true,
+      value: MockFileReader,
+    });
+
+    try {
+      const { container } = renderForm(jest.fn(), makeContact({ photo: PHOTO }));
+      const hiddenPhoto = container.querySelector<HTMLInputElement>('input[name="photo"]');
+      const submit = screen.getByRole("button", { name: /create contact/i });
+
+      await userEvent.upload(
+        screen.getByLabelText(/profile image/i),
+        new File(["new"], "avatar.png", { type: "image/png" }),
+      );
+
+      expect(hiddenPhoto).toHaveValue(PHOTO);
+      expect(submit).toBeDisabled();
+      expect(screen.getByRole("status")).toHaveTextContent("Preparing image");
+
+      act(() => {
+        readers[0].result = "data:image/png;base64,bmV3";
+        readers[0].onload?.call(
+          readers[0] as unknown as FileReader,
+          {} as ProgressEvent<FileReader>,
+        );
+      });
+
+      await waitFor(() => expect(submit).not.toBeDisabled());
+      expect(hiddenPhoto).toHaveValue("data:image/png;base64,bmV3");
+    } finally {
+      Object.defineProperty(global, "FileReader", {
+        configurable: true,
+        writable: true,
+        value: originalFileReader,
+      });
+    }
   });
 
   it("submits the entered values to the action", async () => {

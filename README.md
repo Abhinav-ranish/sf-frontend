@@ -72,7 +72,8 @@ Photos:
 - Accepted file types: JPEG, PNG, and WebP.
 - Maximum decoded image size: 512 KB.
 - Existing photos are preserved while editing unless the user removes them.
-- Saved photos render as circular avatars; contacts without photos show initials.
+- Saved photos render as circular avatars on detail and edit views; contacts
+  without photos show initials.
 
 Addresses:
 
@@ -121,7 +122,8 @@ e2e/                      Playwright specs for real browser flows
 API access is centralized in `src/lib/contacts/api.ts`. Forms use
 `src/lib/contacts/schema.ts` as the shared validation layer before calling the
 backend. FastAPI validation errors are mapped back into form field errors in the
-server actions.
+server actions. The list page uses lightweight API rows that omit full photo
+data; detail and edit pages fetch the complete contact record.
 
 ## Verification
 

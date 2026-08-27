@@ -1,6 +1,6 @@
 import { http, HttpResponse } from "msw";
 import { apiBaseUrl } from "@/lib/apiClient";
-import type { Contact, ContactPage } from "@/lib/contacts/types";
+import type { Contact, ContactListItem, ContactPage } from "@/lib/contacts/types";
 
 /** Prefix a path with the configured API base so handlers match apiClient URLs. */
 export function api(path: string): string {
@@ -39,7 +39,22 @@ export function makeContact(overrides: Partial<Contact> = {}): Contact {
   };
 }
 
-export function makePage(items: Contact[], total = items.length): ContactPage {
+export function makeListItem(contact: Contact): ContactListItem {
+  return {
+    id: contact.id,
+    first_name: contact.first_name,
+    last_name: contact.last_name,
+    email: contact.email,
+    phone: contact.phone,
+    company: contact.company,
+    job_title: contact.job_title,
+    created_at: contact.created_at,
+    updated_at: contact.updated_at,
+    full_name: contact.full_name,
+  };
+}
+
+export function makePage(items: ContactListItem[], total = items.length): ContactPage {
   return { items, total, limit: 25, offset: 0 };
 }
 
@@ -71,7 +86,7 @@ export const handlers = [
         )
       : CONTACTS;
 
-    return HttpResponse.json(makePage(items));
+    return HttpResponse.json(makePage(items.map(makeListItem)));
   }),
 
   http.get(api("/api/v1/contacts/:id"), ({ params }) => {
