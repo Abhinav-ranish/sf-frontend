@@ -11,6 +11,15 @@ import { CONTACTS, makeListItem } from "../mocks/handlers";
 const PHOTO =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR42mP8z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC";
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolver) => {
+    resolve = resolver;
+  });
+
+  return { promise, resolve };
+}
+
 function createAction() {
   return jest.fn<Promise<FormState>, [FormState, FormData]>(
     async () => ({ status: "idle" }),
@@ -203,6 +212,52 @@ describe("NearbyContactSharing", () => {
     expect(formData.has("close_for_ms")).toBe(false);
     expect(formData.has("distance_meters")).toBe(false);
     expect(formData.getAll("shared_field")).toHaveLength(0);
+  });
+
+  it("ignores stale discovery start responses", async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date("2026-08-27T16:00:00Z"));
+    const firstStart = deferred<NearbyDiscoveryState>();
+    const secondStart = deferred<NearbyDiscoveryState>();
+    const startAction = jest
+      .fn<Promise<NearbyDiscoveryState>, []>()
+      .mockReturnValueOnce(firstStart.promise)
+      .mockReturnValueOnce(secondStart.promise);
+    const { action } = renderNearby(createAction(), { startAction });
+    const discoverToggle = screen.getByRole("checkbox", {
+      name: /discover nearby people/i,
+    });
+
+    fireEvent.click(discoverToggle);
+    fireEvent.click(discoverToggle);
+    fireEvent.click(discoverToggle);
+
+    await act(async () => {
+      secondStart.resolve({
+        status: "idle",
+        encounterToken: "second-token",
+        startedAtMs: Date.now(),
+      });
+      await secondStart.promise;
+    });
+    await act(async () => {
+      firstStart.resolve({
+        status: "idle",
+        encounterToken: "first-token",
+        startedAtMs: Date.now(),
+      });
+      await firstStart.promise;
+    });
+
+    act(() => {
+      jest.advanceTimersByTime(8_000);
+    });
+    jest.useRealTimers();
+
+    fireEvent.click(screen.getByRole("button", { name: /save contact/i }));
+    await waitFor(() => expect(action).toHaveBeenCalled());
+
+    expect(action.mock.calls[0][1].get("encounter_token")).toBe("second-token");
   });
 
   it("shows a clear next action when there is no contact to share", () => {

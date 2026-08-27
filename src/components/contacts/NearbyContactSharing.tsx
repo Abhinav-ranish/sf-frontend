@@ -5,6 +5,7 @@ import {
   useActionState,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { useFormStatus } from "react-dom";
@@ -380,6 +381,7 @@ export default function NearbyContactSharing({
 }) {
   const [shareEnabled, setShareEnabled] = useState(false);
   const [discoverEnabled, setDiscoverEnabled] = useState(false);
+  const discoveryRequestId = useRef(0);
   const [discoveryIsStarting, setDiscoveryIsStarting] = useState(false);
   const [discoveryError, setDiscoveryError] = useState<string | null>(null);
   const [encounterToken, setEncounterToken] = useState<string | null>(null);
@@ -503,10 +505,13 @@ export default function NearbyContactSharing({
   }
 
   async function updateDiscovery(checked: boolean) {
+    const requestId = discoveryRequestId.current + 1;
+    discoveryRequestId.current = requestId;
     setDiscoveryError(null);
 
     if (!checked) {
       setDiscoverEnabled(false);
+      setDiscoveryIsStarting(false);
       setStartedAtMs(null);
       setEncounterToken(null);
       setNowMs(Date.now());
@@ -520,6 +525,8 @@ export default function NearbyContactSharing({
 
     try {
       const result = await startAction();
+      if (discoveryRequestId.current !== requestId) return;
+
       if (result.status === "error" || !result.encounterToken) {
         setDiscoverEnabled(false);
         setDiscoveryError(result.message ?? "Could not start discovery.");
@@ -531,10 +538,14 @@ export default function NearbyContactSharing({
       setStartedAtMs(started);
       setNowMs(started);
     } catch {
+      if (discoveryRequestId.current !== requestId) return;
+
       setDiscoverEnabled(false);
       setDiscoveryError("Could not start discovery.");
     } finally {
-      setDiscoveryIsStarting(false);
+      if (discoveryRequestId.current === requestId) {
+        setDiscoveryIsStarting(false);
+      }
     }
   }
 
