@@ -13,9 +13,26 @@ export default function ContactAvatar({
   contact,
   size = "md",
 }: {
-  contact: Pick<Contact, "first_name" | "last_name" | "email">;
+  contact: Pick<Contact, "first_name" | "last_name" | "email"> & {
+    photo?: string | null;
+  };
   size?: keyof typeof SIZES;
 }) {
+  const sizeClass = SIZES[size];
+
+  if (contact.photo) {
+    return (
+      // The API stores data URLs, which Next Image cannot optimize meaningfully.
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={contact.photo}
+        alt=""
+        aria-hidden="true"
+        className={`inline-block shrink-0 rounded-full object-cover ${sizeClass}`}
+      />
+    );
+  }
+
   const style = {
     "--avatar-hue": avatarHue(contact.email),
   } as CSSProperties;
@@ -24,7 +41,7 @@ export default function ContactAvatar({
     <span
       aria-hidden="true"
       style={style}
-      className={`contact-avatar inline-flex shrink-0 select-none items-center justify-center rounded-full font-display font-semibold ${SIZES[size]}`}
+      className={`contact-avatar inline-flex shrink-0 select-none items-center justify-center rounded-full font-display font-semibold ${sizeClass}`}
     >
       {initials(contact)}
     </span>

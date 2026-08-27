@@ -13,9 +13,12 @@ import {
 import {
   contactInputSchema,
   formDataToValues,
+  MAX_PHOTO_LABEL,
+  MAX_PHOTO_BYTES,
+  PHOTO_MIME_TYPES,
   zodFieldErrors,
 } from "@/lib/contacts/schema";
-import type { Contact, FormState } from "@/lib/contacts/types";
+import type { Contact, ContactFormValues, FormState } from "@/lib/contacts/types";
 
 /** Mutations for the contacts UI. Every one of these runs only on the server. */
 
@@ -26,6 +29,40 @@ function invalidate(contactId?: number) {
 
 const UNREACHABLE =
   "Could not reach the Contacts API. Check that the backend is running.";
+
+function isUploadedFile(value: FormDataEntryValue | null): value is File {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "arrayBuffer" in value &&
+    "size" in value &&
+    "type" in value
+  );
+}
+
+async function valuesWithUploadedPhoto(
+  formData: FormData,
+): Promise<{ values: ContactFormValues; photoError?: string }> {
+  const values = formDataToValues(formData);
+  const file = formData.get("photo_file");
+  if (!isUploadedFile(file) || file.size === 0) return { values };
+
+  if (!PHOTO_MIME_TYPES.includes(file.type as (typeof PHOTO_MIME_TYPES)[number])) {
+    return { values, photoError: "Choose a JPEG, PNG, or WebP image." };
+  }
+
+  if (file.size > MAX_PHOTO_BYTES) {
+    return { values, photoError: `Photo must be ${MAX_PHOTO_LABEL} or smaller.` };
+  }
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  return {
+    values: {
+      ...values,
+      photo: `data:${file.type};base64,${buffer.toString("base64")}`,
+    },
+  };
+}
 
 /**
  * Create (when `contactId` is null) or fully replace a contact.
@@ -38,7 +75,15 @@ export async function saveContactAction(
   _prevState: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const values = formDataToValues(formData);
+  const { values, photoError } = await valuesWithUploadedPhoto(formData);
+  if (photoError) {
+    return {
+      status: "error",
+      message: "Please fix the highlighted fields.",
+      fieldErrors: { photo: photoError },
+      values,
+    };
+  }
 
   const parsed = contactInputSchema.safeParse(values);
   if (!parsed.success) {

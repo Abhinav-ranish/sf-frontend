@@ -126,15 +126,16 @@ export function apiErrorMessage(error: ApiError, fallback: string): string {
  */
 export function toFieldErrors(
   error: ApiError,
-): Partial<Record<keyof ContactInput, string>> {
+): Record<string, string> {
   const detail = error.json<{ detail?: ValidationIssue[] }>()?.detail;
   if (!Array.isArray(detail)) return {};
 
-  const fieldErrors: Partial<Record<keyof ContactInput, string>> = {};
+  const fieldErrors: Record<string, string> = {};
   for (const issue of detail) {
-    const field = issue.loc?.[issue.loc.length - 1];
-    if (typeof field === "string" && field !== "body") {
-      fieldErrors[field as keyof ContactInput] ??= issue.msg;
+    const path = issue.loc?.filter((part) => part !== "body");
+    const field = path?.[0];
+    if (typeof field === "string") {
+      fieldErrors[field] ??= issue.msg;
     }
   }
   return fieldErrors;
