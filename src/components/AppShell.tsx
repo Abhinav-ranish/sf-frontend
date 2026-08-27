@@ -14,7 +14,14 @@ const NAV_LINKS: {
   {
     label: "Contacts",
     href: "/contacts",
-    match: (path) => path.startsWith("/contacts") && path !== "/contacts/new",
+    match: (path) =>
+      path.startsWith("/contacts") &&
+      !["/contacts/new", "/contacts/nearby"].includes(path),
+  },
+  {
+    label: "Nearby",
+    href: "/contacts/nearby",
+    match: (path) => path === "/contacts/nearby",
   },
   {
     label: "New contact",

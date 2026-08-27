@@ -34,6 +34,10 @@ describe("AppShell", () => {
       "href",
       "/contacts",
     );
+    expect(screen.getByRole("link", { name: "Nearby" })).toHaveAttribute(
+      "href",
+      "/contacts/nearby",
+    );
     expect(screen.getByRole("link", { name: "New contact" })).toHaveAttribute(
       "href",
       "/contacts/new",
@@ -75,6 +79,18 @@ describe("AppShell", () => {
     mockPathname.mockReturnValue("/contacts/new/");
     renderShell();
     expect(screen.getByRole("link", { name: "New contact" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByRole("link", { name: "Contacts" })).not.toHaveAttribute(
+      "aria-current",
+    );
+  });
+
+  it("switches the active link on the nearby route", () => {
+    mockPathname.mockReturnValue("/contacts/nearby/");
+    renderShell();
+    expect(screen.getByRole("link", { name: "Nearby" })).toHaveAttribute(
       "aria-current",
       "page",
     );
