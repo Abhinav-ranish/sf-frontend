@@ -5,8 +5,9 @@ import {
 } from "@/lib/nearby/simulation";
 import {
   clearUsedNearbyEncounterTokensForTests,
-  consumeNearbyEncounterToken,
   createNearbyEncounterToken,
+  markNearbyEncounterTokenSaved,
+  readNearbyEncounterToken,
 } from "@/lib/nearby/tokens";
 
 const QUALIFY_DELAY_MS = Math.ceil(
@@ -21,12 +22,12 @@ describe("nearby encounter tokens", () => {
   it("requires the server-issued qualification time", () => {
     const token = createNearbyEncounterToken(SIMULATED_NEARBY_PROFILE, 10_000);
 
-    expect(consumeNearbyEncounterToken(token, 10_000 + QUALIFY_DELAY_MS - 1))
+    expect(readNearbyEncounterToken(token, 10_000 + QUALIFY_DELAY_MS - 1))
       .toEqual({
         ok: false,
         message: "This encounter has not qualified yet.",
       });
-    expect(consumeNearbyEncounterToken(token, 10_000 + QUALIFY_DELAY_MS))
+    expect(readNearbyEncounterToken(token, 10_000 + QUALIFY_DELAY_MS))
       .toMatchObject({
         ok: true,
         payload: { profile: { full_name: "Maya Chen" } },
@@ -37,15 +38,18 @@ describe("nearby encounter tokens", () => {
     const token = createNearbyEncounterToken(SIMULATED_NEARBY_PROFILE, 10_000);
     const eligibleAt = 10_000 + QUALIFY_DELAY_MS;
 
-    expect(consumeNearbyEncounterToken(token, 10_000 + 11 * 60 * 1000))
+    expect(readNearbyEncounterToken(token, 10_000 + 11 * 60 * 1000))
       .toEqual({
         ok: false,
         message: "This encounter token expired.",
       });
-    expect(consumeNearbyEncounterToken(token, eligibleAt)).toMatchObject({
-      ok: true,
-    });
-    expect(consumeNearbyEncounterToken(token, eligibleAt + 1)).toEqual({
+    const accepted = readNearbyEncounterToken(token, eligibleAt);
+    expect(accepted).toMatchObject({ ok: true });
+    if (!accepted.ok) throw new Error("Expected token to be accepted");
+
+    markNearbyEncounterTokenSaved(accepted.payload);
+
+    expect(readNearbyEncounterToken(token, eligibleAt + 1)).toEqual({
       ok: false,
       message: "This encounter has already been saved.",
     });
@@ -54,7 +58,7 @@ describe("nearby encounter tokens", () => {
   it("rejects tampered tokens", () => {
     const token = createNearbyEncounterToken(SIMULATED_NEARBY_PROFILE, 10_000);
 
-    expect(consumeNearbyEncounterToken(`${token}x`, 10_000 + QUALIFY_DELAY_MS))
+    expect(readNearbyEncounterToken(`${token}x`, 10_000 + QUALIFY_DELAY_MS))
       .toEqual({
         ok: false,
         message: "This encounter token is invalid.",

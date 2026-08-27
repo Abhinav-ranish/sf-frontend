@@ -17,6 +17,7 @@ const TOKEN_VERSION = "v1";
 const TOKEN_TTL_MS = 10 * 60 * 1000;
 const processLocalTokenKey = randomBytes(32);
 const usedNonces = new Map<string, number>();
+const pendingNonces = new Map<string, number>();
 
 export interface NearbyEncounterTokenPayload {
   profile: NearbySharedProfile;
@@ -50,6 +51,30 @@ function demoEligibleAt(nowMs: number): number {
   return nowMs + Math.ceil(NEARBY_QUALIFY_AFTER_MS / NEARBY_SIMULATION_SPEED);
 }
 
+function cleanupNonces(nowMs: number): void {
+  for (const [nonce, expiresAt] of usedNonces) {
+    if (expiresAt < nowMs) usedNonces.delete(nonce);
+  }
+  for (const [nonce, expiresAt] of pendingNonces) {
+    if (expiresAt < nowMs) pendingNonces.delete(nonce);
+  }
+}
+
+function payloadIsValid(value: unknown): value is NearbyEncounterTokenPayload {
+  if (!value || typeof value !== "object") return false;
+
+  const payload = value as NearbyEncounterTokenPayload;
+  return (
+    typeof payload.nonce === "string" &&
+    Number.isFinite(payload.issuedAt) &&
+    Number.isFinite(payload.eligibleAt) &&
+    Number.isFinite(payload.expiresAt) &&
+    Boolean(payload.profile) &&
+    typeof payload.profile.peerKey === "string" &&
+    Array.isArray(payload.profile.sharedFields)
+  );
+}
+
 export function createNearbyEncounterToken(
   profile: NearbySharedProfile = SIMULATED_NEARBY_PROFILE,
   nowMs = Date.now(),
@@ -76,7 +101,7 @@ export function createNearbyEncounterToken(
   ].join(".");
 }
 
-export function consumeNearbyEncounterToken(
+export function readNearbyEncounterToken(
   token: string,
   nowMs = Date.now(),
 ): NearbyEncounterTokenResult {
@@ -93,29 +118,63 @@ export function consumeNearbyEncounterToken(
         decipher.update(decode(ciphertext)),
         decipher.final(),
       ]).toString("utf8"),
-    ) as NearbyEncounterTokenPayload;
+    );
 
+    if (!payloadIsValid(payload)) {
+      return { ok: false, message: "This encounter token is invalid." };
+    }
     if (nowMs < payload.eligibleAt) {
       return { ok: false, message: "This encounter has not qualified yet." };
     }
     if (nowMs > payload.expiresAt) {
       return { ok: false, message: "This encounter token expired." };
     }
-    for (const [nonce, expiresAt] of usedNonces) {
-      if (expiresAt < nowMs) usedNonces.delete(nonce);
-    }
 
+    cleanupNonces(nowMs);
     if (usedNonces.has(payload.nonce)) {
       return { ok: false, message: "This encounter has already been saved." };
     }
+    if (pendingNonces.has(payload.nonce)) {
+      return { ok: false, message: "This encounter is already being saved." };
+    }
 
-    usedNonces.set(payload.nonce, payload.expiresAt);
     return { ok: true, payload };
   } catch {
     return { ok: false, message: "This encounter token is invalid." };
   }
 }
 
+export function reserveNearbyEncounterToken(
+  payload: NearbyEncounterTokenPayload,
+  nowMs = Date.now(),
+): NearbyEncounterTokenResult {
+  cleanupNonces(nowMs);
+
+  if (usedNonces.has(payload.nonce)) {
+    return { ok: false, message: "This encounter has already been saved." };
+  }
+  if (pendingNonces.has(payload.nonce)) {
+    return { ok: false, message: "This encounter is already being saved." };
+  }
+
+  pendingNonces.set(payload.nonce, payload.expiresAt);
+  return { ok: true, payload };
+}
+
+export function markNearbyEncounterTokenSaved(
+  payload: NearbyEncounterTokenPayload,
+): void {
+  pendingNonces.delete(payload.nonce);
+  usedNonces.set(payload.nonce, payload.expiresAt);
+}
+
+export function releaseNearbyEncounterToken(
+  payload: NearbyEncounterTokenPayload,
+): void {
+  pendingNonces.delete(payload.nonce);
+}
+
 export function clearUsedNearbyEncounterTokensForTests(): void {
   usedNonces.clear();
+  pendingNonces.clear();
 }

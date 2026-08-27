@@ -53,9 +53,11 @@ describe("nearby contact sharing simulation", () => {
       makeContact({ notes: "internal reminder" }),
       ["name", "email", "company"],
       "https://ada.example",
+      "session-peer",
     );
 
     expect("notes" in share).toBe(false);
+    expect(share.peerKey).toBe("session-peer");
     expect(share.email).toBe("ada@example.com");
     expect(share.phone).toBeNull();
     expect(share.website).toBeNull();
@@ -83,7 +85,7 @@ describe("nearby contact sharing simulation", () => {
     });
   });
 
-  it("does not persist unshared name or email values", () => {
+  it("does not persist unshared name or real email values", () => {
     const input = nearbyProfileToContactInput(
       {
         ...SIMULATED_NEARBY_PROFILE,
@@ -94,7 +96,8 @@ describe("nearby contact sharing simulation", () => {
 
     expect(input.first_name).toBe("Nearby");
     expect(input.last_name).toBe("Contact");
-    expect(input.email).toBe("");
+    expect(input.email).toMatch(/^nearby-[a-z0-9]+@nearby\.invalid$/);
+    expect(input.email).not.toBe(SIMULATED_NEARBY_PROFILE.email);
     expect(input.company).toBe("Pier 9 Labs");
   });
 });

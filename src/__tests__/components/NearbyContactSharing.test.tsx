@@ -1,8 +1,15 @@
 import React from "react";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import NearbyContactSharing from "@/components/contacts/NearbyContactSharing";
+import NearbyContactSharing, {
+  type NearbyDiscoveryState,
+  type NearbyLoadContactAction,
+} from "@/components/contacts/NearbyContactSharing";
 import type { FormState } from "@/lib/contacts/types";
-import { CONTACTS } from "../mocks/handlers";
+import type { NearbyShareSourceContact } from "@/lib/nearby/simulation";
+import { CONTACTS, makeListItem } from "../mocks/handlers";
+
+const PHOTO =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR42mP8z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC";
 
 function createAction() {
   return jest.fn<Promise<FormState>, [FormState, FormData]>(
@@ -10,22 +17,51 @@ function createAction() {
   );
 }
 
+function createStartAction(encounterToken = "encounter-token") {
+  return jest.fn<Promise<NearbyDiscoveryState>, []>(async () => ({
+    status: "idle",
+    encounterToken,
+    startedAtMs: Date.now(),
+  }));
+}
+
+function createLoadContactAction(
+  contact: NearbyShareSourceContact | null = null,
+) {
+  return jest.fn<ReturnType<NearbyLoadContactAction>, Parameters<NearbyLoadContactAction>>(
+    async (contactId) =>
+      contact ??
+      CONTACTS.find((item) => item.id === contactId) ??
+      null,
+  );
+}
+
 function renderNearby(
   action = createAction(),
   {
     totalContacts = CONTACTS.length,
+    contacts = CONTACTS,
     encounterToken = "encounter-token",
-  }: { totalContacts?: number; encounterToken?: string } = {},
+    startAction = createStartAction(encounterToken),
+    loadContactAction = createLoadContactAction(),
+  }: {
+    totalContacts?: number;
+    contacts?: NearbyShareSourceContact[];
+    encounterToken?: string;
+    startAction?: ReturnType<typeof createStartAction>;
+    loadContactAction?: ReturnType<typeof createLoadContactAction>;
+  } = {},
 ) {
   render(
     <NearbyContactSharing
-      contacts={CONTACTS}
+      contacts={contacts}
       totalContacts={totalContacts}
-      encounterToken={encounterToken}
+      loadContactAction={loadContactAction}
+      startAction={startAction}
       action={action}
     />,
   );
-  return action;
+  return { action, startAction, loadContactAction };
 }
 
 describe("NearbyContactSharing", () => {
@@ -79,12 +115,29 @@ describe("NearbyContactSharing", () => {
     expect(screen.getByText("Showing 2 of 205 contacts.")).toBeVisible();
   });
 
-  it("shows the encounter card only after the simulated close window qualifies", () => {
+  it("hydrates the selected contact detail for photo sharing", async () => {
+    const { loadContactAction } = renderNearby(createAction(), {
+      contacts: CONTACTS.map(makeListItem),
+      loadContactAction: createLoadContactAction({
+        ...CONTACTS[0],
+        photo: PHOTO,
+      }),
+    });
+
+    await waitFor(() => expect(loadContactAction).toHaveBeenCalledWith(1));
+    await waitFor(() => {
+      expect(document.querySelector("img")).toHaveAttribute("src", PHOTO);
+    });
+  });
+
+  it("shows the encounter card only after the simulated close window qualifies", async () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date("2026-08-27T16:00:00Z"));
     renderNearby();
 
-    fireEvent.click(screen.getByRole("checkbox", { name: /discover nearby people/i }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("checkbox", { name: /discover nearby people/i }));
+    });
 
     expect(screen.getByText(/nearby signal/i)).toBeVisible();
     expect(screen.queryByText(/You may have met Maya Chen at/i)).toBeNull();
@@ -98,12 +151,14 @@ describe("NearbyContactSharing", () => {
     expect(screen.getByRole("button", { name: /save contact/i })).toBeEnabled();
   });
 
-  it("dismisses a qualified encounter and resets discovery", () => {
+  it("dismisses a qualified encounter and resets discovery", async () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date("2026-08-27T16:00:00Z"));
     renderNearby();
 
-    fireEvent.click(screen.getByRole("checkbox", { name: /discover nearby people/i }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("checkbox", { name: /discover nearby people/i }));
+    });
     act(() => {
       jest.advanceTimersByTime(8_000);
     });
@@ -121,14 +176,17 @@ describe("NearbyContactSharing", () => {
   it("submits the curated shared card and receiver private note", async () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date("2026-08-27T16:00:00Z"));
-    const action = renderNearby();
+    const { action, startAction } = renderNearby();
 
-    fireEvent.click(screen.getByRole("checkbox", { name: /discover nearby people/i }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("checkbox", { name: /discover nearby people/i }));
+    });
     act(() => {
       jest.advanceTimersByTime(8_000);
     });
     jest.useRealTimers();
 
+    expect(startAction).toHaveBeenCalledTimes(1);
     fireEvent.change(screen.getByLabelText(/private note/i), {
       target: { value: "Met near the demo table." },
     });
@@ -152,7 +210,8 @@ describe("NearbyContactSharing", () => {
       <NearbyContactSharing
         contacts={[]}
         totalContacts={0}
-        encounterToken="encounter-token"
+        loadContactAction={createLoadContactAction()}
+        startAction={createStartAction()}
         action={createAction()}
       />,
     );

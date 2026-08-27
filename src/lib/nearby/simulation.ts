@@ -217,6 +217,7 @@ export function contactToOutgoingShare(
   contact: NearbyShareSourceContact,
   sharedFields: NearbyShareField[],
   website: string,
+  peerKey: string,
 ): NearbySharedProfile {
   const shares = new Set(sharedFields);
   const sharesName = shares.has("name");
@@ -225,7 +226,7 @@ export function contactToOutgoingShare(
     : null;
 
   return {
-    peerKey: `local-${contact.id}`,
+    peerKey,
     first_name: sharesName ? contact.first_name : "Nearby",
     last_name: sharesName ? contact.last_name : "Contact",
     full_name: sharesName ? contact.full_name : "Nearby Contact",
@@ -247,6 +248,9 @@ export function nearbyProfileToContactInput(
   const website = fieldIsShared(profile, "website")
     ? normalizeWebsiteUrl(profile.website)
     : null;
+  const email = fieldIsShared(profile, "email")
+    ? profile.email
+    : `nearby-${opaqueToken(profile.peerKey)}@nearby.invalid`;
   const noteLines = [
     website ? `Website: ${website}` : null,
     privateNote.trim() || null,
@@ -255,7 +259,7 @@ export function nearbyProfileToContactInput(
   return {
     first_name: sharesName ? profile.first_name : "Nearby",
     last_name: sharesName ? profile.last_name : "Contact",
-    email: fieldIsShared(profile, "email") ? profile.email : "",
+    email,
     phone: fieldIsShared(profile, "phone") ? profile.phone : null,
     photo: fieldIsShared(profile, "photo") ? profile.photo : null,
     company: fieldIsShared(profile, "company") ? profile.company : null,

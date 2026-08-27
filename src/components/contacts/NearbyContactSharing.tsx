@@ -47,6 +47,19 @@ export type NearbySaveAction = (
   formData: FormData,
 ) => Promise<FormState>;
 
+export interface NearbyDiscoveryState {
+  status: "idle" | "error";
+  message?: string;
+  encounterToken?: string;
+  startedAtMs?: number;
+}
+
+export type NearbyStartAction = () => Promise<NearbyDiscoveryState>;
+
+export type NearbyLoadContactAction = (
+  contactId: number,
+) => Promise<NearbyShareSourceContact | null>;
+
 const SWITCH_BASE =
   "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors";
 const SWITCH_KNOB =
@@ -355,21 +368,30 @@ function EncounterForm({
 export default function NearbyContactSharing({
   contacts,
   totalContacts,
-  encounterToken,
+  loadContactAction,
+  startAction,
   action,
 }: {
   contacts: NearbyShareSourceContact[];
   totalContacts: number;
-  encounterToken: string;
+  loadContactAction: NearbyLoadContactAction;
+  startAction: NearbyStartAction;
   action: NearbySaveAction;
 }) {
   const [shareEnabled, setShareEnabled] = useState(false);
   const [discoverEnabled, setDiscoverEnabled] = useState(false);
+  const [discoveryIsStarting, setDiscoveryIsStarting] = useState(false);
+  const [discoveryError, setDiscoveryError] = useState<string | null>(null);
+  const [encounterToken, setEncounterToken] = useState<string | null>(null);
   const [shareSeed] = useState(() => createEphemeralSeed());
   const [discoverSeed] = useState(() => createEphemeralSeed());
   const [selectedContactId, setSelectedContactId] = useState(
     contacts[0]?.id ?? 0,
   );
+  const [selectedContactDetail, setSelectedContactDetail] =
+    useState<NearbyShareSourceContact | null>(null);
+  const [selectedContactLoadError, setSelectedContactLoadError] =
+    useState<{ contactId: number; message: string } | null>(null);
   const [selectedFields, setSelectedFields] = useState<NearbyShareField[]>(
     DEFAULT_NEARBY_SHARE_FIELDS,
   );
@@ -380,14 +402,58 @@ export default function NearbyContactSharing({
 
   const selectedContact =
     contacts.find((contact) => contact.id === selectedContactId) ?? contacts[0];
+  const selectedContactHasPhotoField = selectedContact
+    ? "photo" in selectedContact
+    : false;
+  const shareSourceContact =
+    selectedContactDetail?.id === selectedContact?.id
+      ? selectedContactDetail
+      : selectedContact;
+  const selectedContactIdForLoad = selectedContact?.id;
+  const selectedContactLoadMessage =
+    selectedContactLoadError &&
+    selectedContactLoadError.contactId === selectedContactIdForLoad
+      ? selectedContactLoadError.message
+      : null;
 
   const outgoingProfile = useMemo(
     () =>
-      selectedContact
-        ? contactToOutgoingShare(selectedContact, selectedFields, website)
+      shareSourceContact
+        ? contactToOutgoingShare(
+            shareSourceContact,
+            selectedFields,
+            website,
+            shareSeed,
+          )
         : null,
-    [selectedContact, selectedFields, website],
+    [shareSeed, shareSourceContact, selectedFields, website],
   );
+
+  useEffect(() => {
+    if (!selectedContactIdForLoad || selectedContactHasPhotoField) return;
+
+    let active = true;
+
+    loadContactAction(selectedContactIdForLoad)
+      .then((contact) => {
+        if (active && contact?.id === selectedContactIdForLoad) {
+          setSelectedContactDetail(contact);
+          setSelectedContactLoadError(null);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setSelectedContactLoadError({
+            contactId: selectedContactIdForLoad,
+            message: "Full card details are unavailable right now.",
+          });
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [loadContactAction, selectedContactHasPhotoField, selectedContactIdForLoad]);
 
   useEffect(() => {
     if (!shareEnabled && !discoverEnabled) return;
@@ -398,7 +464,7 @@ export default function NearbyContactSharing({
     return () => window.clearInterval(timer);
   }, [shareEnabled, discoverEnabled]);
 
-  const signal = discoverEnabled && startedAtMs
+  const signal = discoverEnabled && encounterToken && startedAtMs
     ? simulatedSignal({
         peerKey: SIMULATED_NEARBY_PROFILE.peerKey,
         rotationSeed: discoverSeed,
@@ -436,16 +502,40 @@ export default function NearbyContactSharing({
     setNowMs(Date.now());
   }
 
-  function updateDiscovery(checked: boolean) {
-    setDiscoverEnabled(checked);
+  async function updateDiscovery(checked: boolean) {
+    setDiscoveryError(null);
+
     if (!checked) {
+      setDiscoverEnabled(false);
       setStartedAtMs(null);
+      setEncounterToken(null);
+      setNowMs(Date.now());
       return;
     }
 
-    const started = Date.now();
-    setStartedAtMs(started);
-    setNowMs(started);
+    setDiscoverEnabled(true);
+    setDiscoveryIsStarting(true);
+    setStartedAtMs(null);
+    setEncounterToken(null);
+
+    try {
+      const result = await startAction();
+      if (result.status === "error" || !result.encounterToken) {
+        setDiscoverEnabled(false);
+        setDiscoveryError(result.message ?? "Could not start discovery.");
+        return;
+      }
+
+      const started = result.startedAtMs ?? Date.now();
+      setEncounterToken(result.encounterToken);
+      setStartedAtMs(started);
+      setNowMs(started);
+    } catch {
+      setDiscoverEnabled(false);
+      setDiscoveryError("Could not start discovery.");
+    } finally {
+      setDiscoveryIsStarting(false);
+    }
   }
 
   const progress = signal
@@ -519,6 +609,11 @@ export default function NearbyContactSharing({
                   {hasIncompleteContactList ? (
                     <p className="mt-1.5 text-[12px] text-muted-foreground" role="status">
                       Showing {contacts.length} of {totalContacts} contacts.
+                    </p>
+                  ) : null}
+                  {selectedContactLoadMessage ? (
+                    <p className="mt-1.5 text-[12px] text-muted-foreground" role="status">
+                      {selectedContactLoadMessage}
                     </p>
                   ) : null}
                 </div>
@@ -596,7 +691,7 @@ export default function NearbyContactSharing({
           </div>
         </div>
 
-        {encounter ? (
+        {encounter && encounterToken ? (
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
             <div className="space-y-4">
               <div className="rounded-lg border border-success/40 bg-success/10 p-4">
@@ -630,7 +725,18 @@ export default function NearbyContactSharing({
           </div>
         ) : (
           <div className="rounded-lg border border-border bg-card/50 p-4">
-            {discoverEnabled && signal ? (
+            {discoveryError ? (
+              <p
+                role="alert"
+                className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-foreground"
+              >
+                {discoveryError}
+              </p>
+            ) : discoveryIsStarting ? (
+              <p className="text-pretty text-sm text-muted-foreground" role="status">
+                Starting discovery...
+              </p>
+            ) : discoverEnabled && signal ? (
               <div className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
                   <div>
