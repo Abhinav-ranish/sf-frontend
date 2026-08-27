@@ -15,7 +15,9 @@ import {
 
 const TOKEN_VERSION = "v1";
 const TOKEN_TTL_MS = 10 * 60 * 1000;
-const processLocalTokenKey = randomBytes(32);
+const LOCAL_DEMO_SECRET = "sf-contacts-nearby-local-demo-secret";
+const MISSING_SECRET_MESSAGE =
+  "Set NEARBY_TOKEN_SECRET before using nearby sharing in production.";
 const usedNonces = new Map<string, number>();
 const pendingNonces = new Map<string, number>();
 
@@ -31,12 +33,21 @@ type NearbyEncounterTokenResult =
   | { ok: true; payload: NearbyEncounterTokenPayload }
   | { ok: false; message: string };
 
-function tokenKey(): Buffer {
+function tokenSecret(): string {
   const secret =
     process.env.NEARBY_TOKEN_SECRET ||
     process.env.NEXT_SERVER_ACTIONS_ENCRYPTION_KEY;
 
-  return secret ? createHash("sha256").update(secret).digest() : processLocalTokenKey;
+  if (secret) return secret;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(MISSING_SECRET_MESSAGE);
+  }
+
+  return LOCAL_DEMO_SECRET;
+}
+
+function tokenKey(): Buffer {
+  return createHash("sha256").update(tokenSecret()).digest();
 }
 
 function encode(buffer: Buffer): string {

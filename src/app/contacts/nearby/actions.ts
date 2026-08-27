@@ -41,14 +41,21 @@ export interface NearbyDiscoveryState {
 export async function startNearbyDiscoveryAction(): Promise<NearbyDiscoveryState> {
   const startedAtMs = Date.now();
 
-  return {
-    status: "idle",
-    encounterToken: createNearbyEncounterToken(
-      SIMULATED_NEARBY_PROFILE,
+  try {
+    return {
+      status: "idle",
+      encounterToken: createNearbyEncounterToken(
+        SIMULATED_NEARBY_PROFILE,
+        startedAtMs,
+      ),
       startedAtMs,
-    ),
-    startedAtMs,
-  };
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message: error instanceof Error ? error.message : "Could not start discovery.",
+    };
+  }
 }
 
 export async function loadNearbyShareContactAction(
