@@ -12,6 +12,8 @@ stays server-side and the browser does not need direct CORS access to the API.
 - Initials avatar fallback when a contact has no photo.
 - Multiple typed addresses per contact with `Home`, `Work`, and `Other` labels.
 - Server-action Zod validation that mirrors the backend's Pydantic rules.
+- Nearby Contact Sharing demo with curated fields, rotating ephemeral IDs, and
+  sustained-proximity simulation.
 
 ## Quick Start
 
@@ -124,6 +126,11 @@ form data with `src/lib/contacts/schema.ts` before calling the backend. FastAPI
 validation errors are mapped back into form field errors in the server actions.
 The list page uses lightweight API rows that omit full photo data; detail and
 edit pages fetch the complete contact record.
+
+The Nearby Contact Sharing flow is a web demo, not a native background BLE
+implementation. It uses server-sealed encounter tokens and in-memory replay
+tracking for local or single-instance runs; a production native proximity
+detector should replace that replay tracking with an atomic durable nonce store.
 
 ## Verification
 

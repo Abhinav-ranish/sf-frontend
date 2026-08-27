@@ -14,7 +14,14 @@ const NAV_LINKS: {
   {
     label: "Contacts",
     href: "/contacts",
-    match: (path) => path.startsWith("/contacts") && path !== "/contacts/new",
+    match: (path) =>
+      path.startsWith("/contacts") &&
+      !["/contacts/new", "/contacts/nearby"].includes(path),
+  },
+  {
+    label: "Nearby",
+    href: "/contacts/nearby",
+    match: (path) => path === "/contacts/nearby",
   },
   {
     label: "New contact",
@@ -41,12 +48,12 @@ export default function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-40 border-b border-hairline bg-card/95 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-5xl items-center gap-6 px-4">
-          <Link href="/contacts" className="flex items-center gap-2">
+        <div className="mx-auto flex min-h-14 max-w-5xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2 sm:flex-nowrap sm:gap-6 sm:py-0">
+          <Link href="/contacts" className="flex shrink-0 items-center gap-2">
             <Wordmark />
           </Link>
 
-          <nav className="flex items-center gap-1 text-sm">
+          <nav className="order-last flex w-full min-w-0 items-center gap-1 overflow-x-auto text-sm sm:order-none sm:w-auto">
             {NAV_LINKS.map((link) => {
               const active = link.match(currentPath);
 
@@ -55,7 +62,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
                   key={link.href}
                   href={link.href}
                   aria-current={active ? "page" : undefined}
-                  className={`rounded-md px-2.5 py-1.5 transition-colors ${
+                  className={`shrink-0 rounded-md px-2.5 py-1.5 transition-colors ${
                     active
                       ? "bg-secondary text-foreground"
                       : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
