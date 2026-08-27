@@ -1,6 +1,7 @@
 import {
   NEARBY_QUALIFY_AFTER_MS,
   SIMULATED_NEARBY_PROFILE,
+  clearEphemeralIdsForTests,
   contactToOutgoingShare,
   nearbyProfileToContactInput,
   normalizeWebsiteUrl,
@@ -11,23 +12,29 @@ import {
 import { makeContact } from "../../mocks/handlers";
 
 describe("nearby contact sharing simulation", () => {
+  afterEach(() => {
+    clearEphemeralIdsForTests();
+  });
+
   it("rotates ephemeral ids independently from shared profile data", () => {
-    expect(rotatingEphemeralId("peer", 0)).toBe(rotatingEphemeralId("peer", 29_999));
-    expect(rotatingEphemeralId("peer", 0)).not.toBe(
-      rotatingEphemeralId("peer", 30_000),
-    );
-    expect(rotatingEphemeralId("maya-chen", 0)).not.toContain("maya");
-    expect(rotatingEphemeralId("maya-chen", 0)).not.toContain("chen");
+    const firstBucket = rotatingEphemeralId("random-seed", 0);
+
+    expect(firstBucket).toMatch(/^eph-/);
+    expect(firstBucket).toBe(rotatingEphemeralId("random-seed", 29_999));
+    expect(firstBucket).not.toBe(rotatingEphemeralId("random-seed", 30_000));
+    expect(rotatingEphemeralId("local-1", 0)).not.toContain("local");
   });
 
   it("qualifies only after the close-proximity window completes", () => {
     const beforeGate = simulatedSignal({
       peerKey: SIMULATED_NEARBY_PROFILE.peerKey,
+      rotationSeed: "random-seed",
       startedAtMs: 0,
       nowMs: 7_000,
     });
     const afterGate = simulatedSignal({
       peerKey: SIMULATED_NEARBY_PROFILE.peerKey,
+      rotationSeed: "random-seed",
       startedAtMs: 0,
       nowMs: 8_000,
     });

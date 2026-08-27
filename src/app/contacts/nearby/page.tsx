@@ -5,8 +5,9 @@ import { saveNearbyEncounterAction } from "@/app/contacts/nearby/actions";
 import ApiErrorPanel from "@/components/contacts/ApiErrorPanel";
 import NearbyContactSharing from "@/components/contacts/NearbyContactSharing";
 import { ApiUnreachableError, apiBaseUrl } from "@/lib/apiClient";
-import { getContact, listContacts } from "@/lib/contacts/api";
-import type { Contact, ContactPage } from "@/lib/contacts/types";
+import { listContacts } from "@/lib/contacts/api";
+import { MAX_LIMIT, type ContactPage } from "@/lib/contacts/types";
+import { createNearbyEncounterToken } from "@/lib/nearby/tokens";
 
 export const metadata: Metadata = {
   title: "Nearby sharing",
@@ -14,24 +15,12 @@ export const metadata: Metadata = {
 };
 
 export default async function NearbyContactSharingPage() {
-  const outcome = await listContacts({ limit: 25 }).catch(
+  const outcome = await listContacts({ limit: MAX_LIMIT }).catch(
     (error: unknown) => error as Error,
   );
   const result: ContactPage | null = outcome instanceof Error ? null : outcome;
-  let error: Error | null = outcome instanceof Error ? outcome : null;
-  let contacts: Contact[] = [];
-
-  if (result) {
-    const detailOutcome = await Promise.all(
-      result.items.map((contact) => getContact(contact.id)),
-    ).catch((detailError: unknown) => detailError as Error);
-
-    if (detailOutcome instanceof Error) {
-      error = detailOutcome;
-    } else {
-      contacts = detailOutcome.filter((contact): contact is Contact => Boolean(contact));
-    }
-  }
+  const error: Error | null = outcome instanceof Error ? outcome : null;
+  const encounterToken = createNearbyEncounterToken();
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 px-4 py-8">
@@ -62,7 +51,9 @@ export default async function NearbyContactSharingPage() {
         />
       ) : (
         <NearbyContactSharing
-          contacts={contacts}
+          contacts={result?.items ?? []}
+          totalContacts={result?.total ?? 0}
+          encounterToken={encounterToken}
           action={saveNearbyEncounterAction}
         />
       )}

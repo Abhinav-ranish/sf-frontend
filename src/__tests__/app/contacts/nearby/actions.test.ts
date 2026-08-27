@@ -1,6 +1,15 @@
 import { saveNearbyEncounterAction } from "@/app/contacts/nearby/actions";
 import { createContact } from "@/lib/contacts/api";
 import type { FormState } from "@/lib/contacts/types";
+import {
+  NEARBY_QUALIFY_AFTER_MS,
+  NEARBY_SIMULATION_SPEED,
+  SIMULATED_NEARBY_PROFILE,
+} from "@/lib/nearby/simulation";
+import {
+  clearUsedNearbyEncounterTokensForTests,
+  createNearbyEncounterToken,
+} from "@/lib/nearby/tokens";
 import { makeContact } from "../../../mocks/handlers";
 
 jest.mock("next/cache", () => ({
@@ -20,23 +29,18 @@ jest.mock("@/lib/contacts/api", () => ({
 }));
 
 const mockedCreateContact = jest.mocked(createContact);
+const QUALIFY_DELAY_MS = Math.ceil(
+  NEARBY_QUALIFY_AFTER_MS / NEARBY_SIMULATION_SPEED,
+);
 
 function encounterForm(overrides: Record<string, string | string[]> = {}) {
   const formData = new FormData();
   const values: Record<string, string | string[]> = {
-    close_for_ms: "90000",
-    distance_meters: "0.8",
-    peer_key: "maya-chen",
-    first_name: "Maya",
-    last_name: "Chen",
-    email: "maya.chen@example.com",
-    phone: "+1-415-555-0198",
-    photo: "",
-    company: "Pier 9 Labs",
-    job_title: "Design Engineer",
-    website: "https://maya.example",
+    encounter_token: createNearbyEncounterToken(
+      SIMULATED_NEARBY_PROFILE,
+      Date.now() - QUALIFY_DELAY_MS - 1,
+    ),
     private_note: "Follow up.",
-    shared_field: ["name", "email", "phone", "company", "job_title", "website"],
     ...overrides,
   };
 
@@ -53,6 +57,7 @@ function encounterForm(overrides: Record<string, string | string[]> = {}) {
 
 describe("saveNearbyEncounterAction", () => {
   beforeEach(() => {
+    clearUsedNearbyEncounterTokensForTests();
     mockedCreateContact.mockResolvedValue(makeContact({ id: 77 }));
   });
 
@@ -61,9 +66,10 @@ describe("saveNearbyEncounterAction", () => {
   });
 
   it("rejects saves before the encounter qualifies", async () => {
+    const token = createNearbyEncounterToken(SIMULATED_NEARBY_PROFILE, Date.now());
     const result = await saveNearbyEncounterAction(
       { status: "idle" },
-      encounterForm({ close_for_ms: "30000" }),
+      encounterForm({ encounter_token: token, close_for_ms: "90000" }),
     );
 
     expect(result).toEqual({
@@ -74,10 +80,22 @@ describe("saveNearbyEncounterAction", () => {
   });
 
   it("gates saved contact fields by the shared-field list", async () => {
+    const token = createNearbyEncounterToken(
+      {
+        ...SIMULATED_NEARBY_PROFILE,
+        sharedFields: ["name", "email"],
+      },
+      Date.now() - QUALIFY_DELAY_MS - 1,
+    );
+
     await expect(
       saveNearbyEncounterAction(
         { status: "idle" } satisfies FormState,
-        encounterForm({ phone: "+1-999-999-9999", shared_field: ["name", "email"] }),
+        encounterForm({
+          encounter_token: token,
+          phone: "+1-999-999-9999",
+          shared_field: ["name", "email", "phone", "company"],
+        }),
       ),
     ).rejects.toThrow("NEXT_REDIRECT:/contacts/77");
 
@@ -91,5 +109,23 @@ describe("saveNearbyEncounterAction", () => {
         job_title: null,
       }),
     );
+  });
+
+  it("rejects replayed encounter tokens", async () => {
+    const formData = encounterForm();
+
+    await expect(
+      saveNearbyEncounterAction({ status: "idle" }, formData),
+    ).rejects.toThrow("NEXT_REDIRECT:/contacts/77");
+
+    mockedCreateContact.mockClear();
+
+    await expect(
+      saveNearbyEncounterAction({ status: "idle" }, formData),
+    ).resolves.toEqual({
+      status: "error",
+      message: "This encounter has already been saved.",
+    });
+    expect(mockedCreateContact).not.toHaveBeenCalled();
   });
 });

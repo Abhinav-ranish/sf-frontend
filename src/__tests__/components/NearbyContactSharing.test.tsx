@@ -10,8 +10,21 @@ function createAction() {
   );
 }
 
-function renderNearby(action = createAction()) {
-  render(<NearbyContactSharing contacts={CONTACTS} action={action} />);
+function renderNearby(
+  action = createAction(),
+  {
+    totalContacts = CONTACTS.length,
+    encounterToken = "encounter-token",
+  }: { totalContacts?: number; encounterToken?: string } = {},
+) {
+  render(
+    <NearbyContactSharing
+      contacts={CONTACTS}
+      totalContacts={totalContacts}
+      encounterToken={encounterToken}
+      action={action}
+    />,
+  );
   return action;
 }
 
@@ -58,6 +71,12 @@ describe("NearbyContactSharing", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "Email" }));
 
     expect(screen.queryByRole("link", { name: "ada@example.com" })).toBeNull();
+  });
+
+  it("shows when the source contact selector has more contacts on the API", () => {
+    renderNearby(createAction(), { totalContacts: 205 });
+
+    expect(screen.getByText("Showing 2 of 205 contacts.")).toBeVisible();
   });
 
   it("shows the encounter card only after the simulated close window qualifies", () => {
@@ -118,17 +137,25 @@ describe("NearbyContactSharing", () => {
     await waitFor(() => expect(action).toHaveBeenCalled());
 
     const formData = action.mock.calls[0][1];
-    expect(formData.get("first_name")).toBe("Maya");
-    expect(formData.get("email")).toBe("maya.chen@example.com");
-    expect(formData.get("website")).toBe("https://maya.example");
-    expect(formData.get("close_for_ms")).toBe("90000");
-    expect(formData.get("distance_meters")).toBe("0.8");
+    expect(formData.get("encounter_token")).toBe("encounter-token");
     expect(formData.get("private_note")).toBe("Met near the demo table.");
-    expect(formData.getAll("shared_field")).not.toContain("notes");
+    expect(formData.has("first_name")).toBe(false);
+    expect(formData.has("email")).toBe(false);
+    expect(formData.has("website")).toBe(false);
+    expect(formData.has("close_for_ms")).toBe(false);
+    expect(formData.has("distance_meters")).toBe(false);
+    expect(formData.getAll("shared_field")).toHaveLength(0);
   });
 
   it("shows a clear next action when there is no contact to share", () => {
-    render(<NearbyContactSharing contacts={[]} action={createAction()} />);
+    render(
+      <NearbyContactSharing
+        contacts={[]}
+        totalContacts={0}
+        encounterToken="encounter-token"
+        action={createAction()}
+      />,
+    );
 
     expect(screen.getByText(/Add a contact before enabling/i)).toBeVisible();
     expect(screen.getByRole("link", { name: /new contact/i })).toHaveAttribute(

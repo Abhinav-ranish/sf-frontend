@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import ContactAvatar from "@/components/contacts/ContactAvatar";
 import Button, { buttonClasses } from "@/components/ui/Button";
-import { EMPTY_FORM_STATE, type Contact, type FormState } from "@/lib/contacts/types";
+import { EMPTY_FORM_STATE, type FormState } from "@/lib/contacts/types";
 import {
   DEFAULT_NEARBY_SHARE_FIELDS,
   NEARBY_QUALIFY_AFTER_MS,
@@ -30,14 +30,15 @@ import {
   NEARBY_SIMULATION_SPEED,
   SIMULATED_NEARBY_PROFILE,
   contactToOutgoingShare,
+  createEphemeralSeed,
   fieldIsShared,
   normalizeWebsiteUrl,
   qualifiesForEncounter,
   resolveSimulatedEncounter,
   rotatingEphemeralId,
   simulatedSignal,
-  type NearbyEncounter,
   type NearbyShareField,
+  type NearbyShareSourceContact,
   type NearbySharedProfile,
 } from "@/lib/nearby/simulation";
 
@@ -298,62 +299,19 @@ function ShareFieldPicker({
 }
 
 function EncounterForm({
-  encounter,
+  encounterToken,
   state,
   action,
   onDismiss,
 }: {
-  encounter: NearbyEncounter;
+  encounterToken: string;
   state: FormState;
   action: (formData: FormData) => void;
   onDismiss: () => void;
 }) {
-  const profile = encounter.profile;
-  const sharesName = fieldIsShared(profile, "name");
-  const website = fieldIsShared(profile, "website")
-    ? normalizeWebsiteUrl(profile.website)
-    : null;
-
   return (
     <form action={action} className="space-y-4">
-      <input type="hidden" name="close_for_ms" value={encounter.signal.closeForMs} />
-      <input
-        type="hidden"
-        name="distance_meters"
-        value={encounter.signal.distanceMeters}
-      />
-      <input type="hidden" name="peer_key" value={profile.peerKey} />
-      <input type="hidden" name="first_name" value={sharesName ? profile.first_name : ""} />
-      <input type="hidden" name="last_name" value={sharesName ? profile.last_name : ""} />
-      <input
-        type="hidden"
-        name="email"
-        value={fieldIsShared(profile, "email") ? profile.email : ""}
-      />
-      <input
-        type="hidden"
-        name="phone"
-        value={fieldIsShared(profile, "phone") ? profile.phone ?? "" : ""}
-      />
-      <input
-        type="hidden"
-        name="photo"
-        value={fieldIsShared(profile, "photo") ? profile.photo ?? "" : ""}
-      />
-      <input
-        type="hidden"
-        name="company"
-        value={fieldIsShared(profile, "company") ? profile.company ?? "" : ""}
-      />
-      <input
-        type="hidden"
-        name="job_title"
-        value={fieldIsShared(profile, "job_title") ? profile.job_title ?? "" : ""}
-      />
-      <input type="hidden" name="website" value={website ?? ""} />
-      {profile.sharedFields.map((field) => (
-        <input key={field} type="hidden" name="shared_field" value={field} />
-      ))}
+      <input type="hidden" name="encounter_token" value={encounterToken} />
 
       {state.status === "error" && state.message ? (
         <p
@@ -396,13 +354,19 @@ function EncounterForm({
 
 export default function NearbyContactSharing({
   contacts,
+  totalContacts,
+  encounterToken,
   action,
 }: {
-  contacts: Contact[];
+  contacts: NearbyShareSourceContact[];
+  totalContacts: number;
+  encounterToken: string;
   action: NearbySaveAction;
 }) {
   const [shareEnabled, setShareEnabled] = useState(false);
   const [discoverEnabled, setDiscoverEnabled] = useState(false);
+  const [shareSeed] = useState(() => createEphemeralSeed());
+  const [discoverSeed] = useState(() => createEphemeralSeed());
   const [selectedContactId, setSelectedContactId] = useState(
     contacts[0]?.id ?? 0,
   );
@@ -437,6 +401,7 @@ export default function NearbyContactSharing({
   const signal = discoverEnabled && startedAtMs
     ? simulatedSignal({
         peerKey: SIMULATED_NEARBY_PROFILE.peerKey,
+        rotationSeed: discoverSeed,
         startedAtMs,
         nowMs,
       })
@@ -450,11 +415,12 @@ export default function NearbyContactSharing({
     return resolveSimulatedEncounter(
       simulatedSignal({
         peerKey: SIMULATED_NEARBY_PROFILE.peerKey,
+        rotationSeed: discoverSeed,
         startedAtMs,
         nowMs: qualifiedAtMs,
       }),
     );
-  }, [signal, startedAtMs]);
+  }, [discoverSeed, signal, startedAtMs]);
 
   function toggleShareField(field: NearbyShareField) {
     setSelectedFields((current) =>
@@ -487,8 +453,9 @@ export default function NearbyContactSharing({
     : 0;
   const outgoingId =
     outgoingProfile && shareEnabled
-      ? rotatingEphemeralId(outgoingProfile.peerKey, nowMs)
+      ? rotatingEphemeralId(shareSeed, nowMs)
       : null;
+  const hasIncompleteContactList = totalContacts > contacts.length;
 
   return (
     <div className="space-y-6">
@@ -549,6 +516,11 @@ export default function NearbyContactSharing({
                       </option>
                     ))}
                   </select>
+                  {hasIncompleteContactList ? (
+                    <p className="mt-1.5 text-[12px] text-muted-foreground" role="status">
+                      Showing {contacts.length} of {totalContacts} contacts.
+                    </p>
+                  ) : null}
                 </div>
                 <div>
                   <label
@@ -650,7 +622,7 @@ export default function NearbyContactSharing({
               <SharedProfileCard profile={encounter.profile} eyebrow="Curated card" />
             </div>
             <EncounterForm
-              encounter={encounter}
+              encounterToken={encounterToken}
               state={state}
               action={formAction}
               onDismiss={dismissEncounter}

@@ -40,6 +40,20 @@ export interface NearbySharedProfile {
   sharedFields: NearbyShareField[];
 }
 
+export type NearbyShareSourceContact = Pick<
+  Contact,
+  | "id"
+  | "first_name"
+  | "last_name"
+  | "full_name"
+  | "email"
+  | "phone"
+  | "company"
+  | "job_title"
+> & {
+  photo?: string | null;
+};
+
 export interface NearbyProximitySignal {
   peerKey: string;
   ephemeralId: string;
@@ -60,7 +74,7 @@ const DEMO_PHOTO =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR42mP8z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC";
 
 export const SIMULATED_NEARBY_PROFILE: NearbySharedProfile = {
-  peerKey: "maya-chen",
+  peerKey: "demo-peer-1",
   first_name: "Maya",
   last_name: "Chen",
   full_name: "Maya Chen",
@@ -80,6 +94,8 @@ export const SIMULATED_NEARBY_PROFILE: NearbySharedProfile = {
     "website",
   ],
 };
+
+const ephemeralIdBuckets = new Map<string, string>();
 
 function opaqueToken(value: string): string {
   let hash = 0x811c9dc5;
@@ -102,6 +118,24 @@ export function normalizeWebsiteUrl(value: string | null): string | null {
   }
 }
 
+function randomHex(byteLength: number): string {
+  if (globalThis.crypto?.getRandomValues) {
+    const bytes = new Uint8Array(byteLength);
+    globalThis.crypto.getRandomValues(bytes);
+    return Array.from(bytes, (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("");
+  }
+
+  return opaqueToken(`${Date.now()}:${Math.random()}`).repeat(3);
+}
+
+export function createEphemeralSeed(): string {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+
+  return randomHex(16);
+}
+
 export function fieldIsShared(
   profile: Pick<NearbySharedProfile, "sharedFields">,
   field: NearbyShareField,
@@ -110,28 +144,42 @@ export function fieldIsShared(
 }
 
 export function rotatingEphemeralId(
-  peerKey: string,
+  rotationSeed: string,
   nowMs: number,
   rotateEveryMs = NEARBY_ROTATE_EVERY_MS,
 ): string {
   const bucket = Math.floor(nowMs / rotateEveryMs);
-  return `eph-${opaqueToken(`${peerKey}:${bucket}`)}`;
+  const cacheKey = `${rotationSeed}:${bucket}`;
+  let ephemeralId = ephemeralIdBuckets.get(cacheKey);
+
+  if (!ephemeralId) {
+    ephemeralId = `eph-${randomHex(10)}`;
+    ephemeralIdBuckets.set(cacheKey, ephemeralId);
+  }
+
+  return ephemeralId;
+}
+
+export function clearEphemeralIdsForTests(): void {
+  ephemeralIdBuckets.clear();
 }
 
 export function simulatedSignal({
   peerKey,
+  rotationSeed,
   startedAtMs,
   nowMs,
   distanceMeters = 0.8,
 }: {
   peerKey: string;
+  rotationSeed: string;
   startedAtMs: number;
   nowMs: number;
   distanceMeters?: number;
 }): NearbyProximitySignal {
   return {
     peerKey,
-    ephemeralId: rotatingEphemeralId(peerKey, nowMs),
+    ephemeralId: rotatingEphemeralId(rotationSeed, nowMs),
     distanceMeters,
     closeForMs: Math.max(0, (nowMs - startedAtMs) * NEARBY_SIMULATION_SPEED),
     detectedAt: new Date(startedAtMs).toISOString(),
@@ -166,7 +214,7 @@ export function resolveSimulatedEncounter(
 }
 
 export function contactToOutgoingShare(
-  contact: Contact,
+  contact: NearbyShareSourceContact,
   sharedFields: NearbyShareField[],
   website: string,
 ): NearbySharedProfile {
@@ -183,7 +231,7 @@ export function contactToOutgoingShare(
     full_name: sharesName ? contact.full_name : "Nearby Contact",
     email: shares.has("email") ? contact.email : "",
     phone: shares.has("phone") ? contact.phone : null,
-    photo: shares.has("photo") ? contact.photo : null,
+    photo: shares.has("photo") ? contact.photo ?? null : null,
     company: shares.has("company") ? contact.company : null,
     job_title: shares.has("job_title") ? contact.job_title : null,
     website: sharedWebsite,
