@@ -141,14 +141,22 @@ describe("ContactForm", () => {
     expect(formData.get("addresses.1.address")).toBe("88 Colin P Kelly Jr St");
   });
 
-  it("blocks submit while an oversized photo selection is present", async () => {
-    renderForm(jest.fn());
+  it("keeps the current photo submittable after an invalid replacement selection", async () => {
+    const action = jest.fn<Promise<FormState>, [FormState, FormData]>(
+      async () => ({ status: "idle" }),
+    );
+    const { container } = renderForm(action, makeContact({ photo: PHOTO }));
 
     const file = new File(["x".repeat(513 * 1024)], "avatar.png", { type: "image/png" });
     await userEvent.upload(screen.getByLabelText(/profile image/i), file);
 
     expect(screen.getByText("Photo must be 512 KB or smaller.")).toBeVisible();
-    expect(screen.getByRole("button", { name: /create contact/i })).toBeDisabled();
+    expect(container.querySelector('input[name="photo"]')).toHaveValue(PHOTO);
+    expect(screen.getByRole("button", { name: /create contact/i })).toBeEnabled();
+
+    await userEvent.click(screen.getByRole("button", { name: /create contact/i }));
+    await waitFor(() => expect(action).toHaveBeenCalled());
+    expect(action.mock.calls[0][1].get("photo")).toBe(PHOTO);
   });
 
   it("shows the summary and the per-field errors the action returns", async () => {

@@ -68,13 +68,11 @@ function PhotoField({
   value,
   contact,
   error,
-  onLocalErrorChange,
   onReadingChange,
 }: {
   value: string;
   contact?: Contact;
   error?: string;
-  onLocalErrorChange: (message: string | null) => void;
   onReadingChange: (isReading: boolean) => void;
 }) {
   const [photo, setPhoto] = useState(value);
@@ -90,7 +88,6 @@ function PhotoField({
 
   function setPhotoError(message: string | null) {
     setLocalError(message);
-    onLocalErrorChange(message);
   }
 
   function setPhotoReading(nextIsReading: boolean) {
@@ -374,7 +371,6 @@ export default function ContactForm({
   cancelHref: string;
 }) {
   const [state, formAction] = useActionState(action, EMPTY_FORM_STATE);
-  const [photoLocalError, setPhotoLocalError] = useState<string | null>(null);
   const [photoIsReading, setPhotoIsReading] = useState(false);
 
   function valueFor(name: keyof ContactFormValues): string {
@@ -413,7 +409,6 @@ export default function ContactForm({
         value={photoValue}
         contact={contact}
         error={state.fieldErrors?.photo}
-        onLocalErrorChange={setPhotoLocalError}
         onReadingChange={setPhotoIsReading}
       />
 
@@ -454,10 +449,7 @@ export default function ContactForm({
       ))}
 
       <div className="flex items-center gap-2 border-t border-hairline pt-4">
-        <SubmitButton
-          label={submitLabel}
-          disabled={Boolean(photoLocalError) || photoIsReading}
-        />
+        <SubmitButton label={submitLabel} disabled={photoIsReading} />
         <Link href={cancelHref} className={buttonClasses("secondary")}>
           Cancel
         </Link>

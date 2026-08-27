@@ -7,11 +7,12 @@ import type {
 } from "./types";
 
 /**
- * Client/server-shared validation for the contact form.
+ * Server-action validation for contact form submissions.
  *
  * The rules mirror the API's Pydantic models (`ContactCreate` / `ContactReplace`)
- * so the user sees a mistake before a round trip — the API stays the authority,
- * and anything it rejects anyway is surfaced by `toFieldErrors` in `./api.ts`.
+ * so form posts get consistent field errors before the API call. The API stays
+ * the authority, and anything it rejects anyway is surfaced by `toFieldErrors`
+ * in `./api.ts`.
  */
 
 /** Optional text: trimmed, and blank becomes `null` (the API clears the field). */

@@ -11,7 +11,7 @@ stays server-side and the browser does not need direct CORS access to the API.
 - Contact photo upload with preview and circular avatar display.
 - Initials avatar fallback when a contact has no photo.
 - Multiple typed addresses per contact with `Home`, `Work`, and `Other` labels.
-- Client-side Zod validation that mirrors the backend's Pydantic rules.
+- Server-action Zod validation that mirrors the backend's Pydantic rules.
 
 ## Quick Start
 
@@ -119,11 +119,11 @@ src/__tests__/            Jest tests with MSW handlers
 e2e/                      Playwright specs for real browser flows
 ```
 
-API access is centralized in `src/lib/contacts/api.ts`. Forms use
-`src/lib/contacts/schema.ts` as the shared validation layer before calling the
-backend. FastAPI validation errors are mapped back into form field errors in the
-server actions. The list page uses lightweight API rows that omit full photo
-data; detail and edit pages fetch the complete contact record.
+API access is centralized in `src/lib/contacts/api.ts`. Server actions validate
+form data with `src/lib/contacts/schema.ts` before calling the backend. FastAPI
+validation errors are mapped back into form field errors in the server actions.
+The list page uses lightweight API rows that omit full photo data; detail and
+edit pages fetch the complete contact record.
 
 ## Verification
 
