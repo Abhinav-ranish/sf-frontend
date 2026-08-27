@@ -81,6 +81,27 @@ export const SIMULATED_NEARBY_PROFILE: NearbySharedProfile = {
   ],
 };
 
+function opaqueToken(value: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(36).padStart(7, "0");
+}
+
+export function normalizeWebsiteUrl(value: string | null): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+
+  try {
+    const url = new URL(trimmed);
+    return url.protocol === "http:" || url.protocol === "https:" ? trimmed : null;
+  } catch {
+    return null;
+  }
+}
+
 export function fieldIsShared(
   profile: Pick<NearbySharedProfile, "sharedFields">,
   field: NearbyShareField,
@@ -93,7 +114,8 @@ export function rotatingEphemeralId(
   nowMs: number,
   rotateEveryMs = NEARBY_ROTATE_EVERY_MS,
 ): string {
-  return `eph-${peerKey}-${Math.floor(nowMs / rotateEveryMs).toString(36)}`;
+  const bucket = Math.floor(nowMs / rotateEveryMs);
+  return `eph-${opaqueToken(`${peerKey}:${bucket}`)}`;
 }
 
 export function simulatedSignal({
@@ -150,6 +172,9 @@ export function contactToOutgoingShare(
 ): NearbySharedProfile {
   const shares = new Set(sharedFields);
   const sharesName = shares.has("name");
+  const sharedWebsite = shares.has("website")
+    ? normalizeWebsiteUrl(website)
+    : null;
 
   return {
     peerKey: `local-${contact.id}`,
@@ -161,7 +186,7 @@ export function contactToOutgoingShare(
     photo: shares.has("photo") ? contact.photo : null,
     company: shares.has("company") ? contact.company : null,
     job_title: shares.has("job_title") ? contact.job_title : null,
-    website: shares.has("website") ? website.trim() || null : null,
+    website: sharedWebsite,
     sharedFields,
   };
 }
@@ -170,16 +195,19 @@ export function nearbyProfileToContactInput(
   profile: NearbySharedProfile,
   privateNote: string,
 ): ContactInput {
-  const website = fieldIsShared(profile, "website") ? profile.website : null;
+  const sharesName = fieldIsShared(profile, "name");
+  const website = fieldIsShared(profile, "website")
+    ? normalizeWebsiteUrl(profile.website)
+    : null;
   const noteLines = [
     website ? `Website: ${website}` : null,
     privateNote.trim() || null,
   ].filter(Boolean);
 
   return {
-    first_name: profile.first_name,
-    last_name: profile.last_name,
-    email: profile.email,
+    first_name: sharesName ? profile.first_name : "Nearby",
+    last_name: sharesName ? profile.last_name : "Contact",
+    email: fieldIsShared(profile, "email") ? profile.email : "",
     phone: fieldIsShared(profile, "phone") ? profile.phone : null,
     photo: fieldIsShared(profile, "photo") ? profile.photo : null,
     company: fieldIsShared(profile, "company") ? profile.company : null,

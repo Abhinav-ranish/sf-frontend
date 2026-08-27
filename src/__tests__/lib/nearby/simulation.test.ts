@@ -3,6 +3,7 @@ import {
   SIMULATED_NEARBY_PROFILE,
   contactToOutgoingShare,
   nearbyProfileToContactInput,
+  normalizeWebsiteUrl,
   resolveSimulatedEncounter,
   rotatingEphemeralId,
   simulatedSignal,
@@ -15,6 +16,8 @@ describe("nearby contact sharing simulation", () => {
     expect(rotatingEphemeralId("peer", 0)).not.toBe(
       rotatingEphemeralId("peer", 30_000),
     );
+    expect(rotatingEphemeralId("maya-chen", 0)).not.toContain("maya");
+    expect(rotatingEphemeralId("maya-chen", 0)).not.toContain("chen");
   });
 
   it("qualifies only after the close-proximity window completes", () => {
@@ -51,6 +54,13 @@ describe("nearby contact sharing simulation", () => {
     expect(share.website).toBeNull();
   });
 
+  it("normalizes website sharing to http and https URLs", () => {
+    expect(normalizeWebsiteUrl("https://maya.example")).toBe("https://maya.example");
+    expect(normalizeWebsiteUrl("http://maya.example")).toBe("http://maya.example");
+    expect(normalizeWebsiteUrl("javascript:alert(1)")).toBeNull();
+    expect(normalizeWebsiteUrl("maya.example")).toBeNull();
+  });
+
   it("maps an accepted shared card to the existing contact input shape", () => {
     const input = nearbyProfileToContactInput(
       SIMULATED_NEARBY_PROFILE,
@@ -64,5 +74,20 @@ describe("nearby contact sharing simulation", () => {
       addresses: [],
       notes: "Website: https://maya.example\n\nFollow up about the prototype.",
     });
+  });
+
+  it("does not persist unshared name or email values", () => {
+    const input = nearbyProfileToContactInput(
+      {
+        ...SIMULATED_NEARBY_PROFILE,
+        sharedFields: ["company"],
+      },
+      "",
+    );
+
+    expect(input.first_name).toBe("Nearby");
+    expect(input.last_name).toBe("Contact");
+    expect(input.email).toBe("");
+    expect(input.company).toBe("Pier 9 Labs");
   });
 });

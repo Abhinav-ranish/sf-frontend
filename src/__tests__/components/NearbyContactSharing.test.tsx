@@ -32,6 +32,32 @@ describe("NearbyContactSharing", () => {
     expect(screen.getByRole("checkbox", { name: "Email" })).toBeChecked();
     expect(screen.queryByRole("checkbox", { name: /notes/i })).toBeNull();
     expect(screen.getByText(/private notes are not available/i)).toBeVisible();
+    expect(
+      screen.getByRole("checkbox", { name: /share my contact/i }).closest("label"),
+    ).toHaveClass("focus-within:ring-2");
+  });
+
+  it("keeps sharing and discovery independent", () => {
+    renderNearby();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /share my contact/i }));
+
+    expect(screen.getByRole("checkbox", { name: /share my contact/i })).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: /discover nearby people/i }),
+    ).not.toBeChecked();
+    expect(screen.queryByText("not sharing")).toBeNull();
+    expect(screen.getByText(/Discovery is off/i)).toBeVisible();
+  });
+
+  it("updates the outgoing card when a share field is removed", () => {
+    renderNearby();
+
+    expect(screen.getByRole("link", { name: "ada@example.com" })).toBeVisible();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Email" }));
+
+    expect(screen.queryByRole("link", { name: "ada@example.com" })).toBeNull();
   });
 
   it("shows the encounter card only after the simulated close window qualifies", () => {
@@ -51,6 +77,26 @@ describe("NearbyContactSharing", () => {
     expect(screen.getByText(/You may have met Maya Chen at/i)).toBeVisible();
     expect(screen.getByText("Curated card")).toBeVisible();
     expect(screen.getByRole("button", { name: /save contact/i })).toBeEnabled();
+  });
+
+  it("dismisses a qualified encounter and resets discovery", () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date("2026-08-27T16:00:00Z"));
+    renderNearby();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /discover nearby people/i }));
+    act(() => {
+      jest.advanceTimersByTime(8_000);
+    });
+    expect(screen.getByText(/You may have met Maya Chen at/i)).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: /dismiss/i }));
+
+    expect(
+      screen.getByRole("checkbox", { name: /discover nearby people/i }),
+    ).not.toBeChecked();
+    expect(screen.queryByText(/You may have met Maya Chen at/i)).toBeNull();
+    expect(screen.getByText(/Discovery is off/i)).toBeVisible();
   });
 
   it("submits the curated shared card and receiver private note", async () => {
@@ -75,7 +121,20 @@ describe("NearbyContactSharing", () => {
     expect(formData.get("first_name")).toBe("Maya");
     expect(formData.get("email")).toBe("maya.chen@example.com");
     expect(formData.get("website")).toBe("https://maya.example");
+    expect(formData.get("close_for_ms")).toBe("90000");
+    expect(formData.get("distance_meters")).toBe("0.8");
     expect(formData.get("private_note")).toBe("Met near the demo table.");
     expect(formData.getAll("shared_field")).not.toContain("notes");
+  });
+
+  it("shows a clear next action when there is no contact to share", () => {
+    render(<NearbyContactSharing contacts={[]} action={createAction()} />);
+
+    expect(screen.getByText(/Add a contact before enabling/i)).toBeVisible();
+    expect(screen.getByRole("link", { name: /new contact/i })).toHaveAttribute(
+      "href",
+      "/contacts/new",
+    );
+    expect(screen.getByText("not sharing")).toBeVisible();
   });
 });

@@ -31,6 +31,7 @@ import {
   SIMULATED_NEARBY_PROFILE,
   contactToOutgoingShare,
   fieldIsShared,
+  normalizeWebsiteUrl,
   qualifiesForEncounter,
   resolveSimulatedEncounter,
   rotatingEphemeralId,
@@ -93,7 +94,7 @@ function SwitchCard({
   return (
     <label
       htmlFor={id}
-      className="flex items-start justify-between gap-4 rounded-lg border border-border bg-card p-4"
+      className="flex items-start justify-between gap-4 rounded-lg border border-border bg-card p-4 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background"
     >
       <span className="flex min-w-0 gap-3">
         <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-secondary text-muted-foreground">
@@ -133,6 +134,9 @@ function SwitchCard({
 
 function ProfileRows({ profile }: { profile: NearbySharedProfile }) {
   const rows: { label: string; value: ReactNode }[] = [];
+  const website = fieldIsShared(profile, "website")
+    ? normalizeWebsiteUrl(profile.website)
+    : null;
 
   if (fieldIsShared(profile, "email") && profile.email) {
     rows.push({
@@ -164,12 +168,12 @@ function ProfileRows({ profile }: { profile: NearbySharedProfile }) {
     rows.push({ label: "Job title", value: profile.job_title });
   }
 
-  if (fieldIsShared(profile, "website") && profile.website) {
+  if (website) {
     rows.push({
       label: "Website",
       value: (
-        <a href={profile.website} className="text-primary hover:underline">
-          {profile.website}
+        <a href={website} className="text-primary hover:underline">
+          {website}
         </a>
       ),
     });
@@ -261,7 +265,7 @@ function ShareFieldPicker({
           return (
             <label
               key={field.key}
-              className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors ${
+              className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background ${
                 checked
                   ? "border-primary/70 bg-primary/10 text-foreground"
                   : "border-border bg-card/60 text-muted-foreground hover:bg-secondary/40"
@@ -305,18 +309,48 @@ function EncounterForm({
   onDismiss: () => void;
 }) {
   const profile = encounter.profile;
+  const sharesName = fieldIsShared(profile, "name");
+  const website = fieldIsShared(profile, "website")
+    ? normalizeWebsiteUrl(profile.website)
+    : null;
 
   return (
     <form action={action} className="space-y-4">
+      <input type="hidden" name="close_for_ms" value={encounter.signal.closeForMs} />
+      <input
+        type="hidden"
+        name="distance_meters"
+        value={encounter.signal.distanceMeters}
+      />
       <input type="hidden" name="peer_key" value={profile.peerKey} />
-      <input type="hidden" name="first_name" value={profile.first_name} />
-      <input type="hidden" name="last_name" value={profile.last_name} />
-      <input type="hidden" name="email" value={profile.email} />
-      <input type="hidden" name="phone" value={profile.phone ?? ""} />
-      <input type="hidden" name="photo" value={profile.photo ?? ""} />
-      <input type="hidden" name="company" value={profile.company ?? ""} />
-      <input type="hidden" name="job_title" value={profile.job_title ?? ""} />
-      <input type="hidden" name="website" value={profile.website ?? ""} />
+      <input type="hidden" name="first_name" value={sharesName ? profile.first_name : ""} />
+      <input type="hidden" name="last_name" value={sharesName ? profile.last_name : ""} />
+      <input
+        type="hidden"
+        name="email"
+        value={fieldIsShared(profile, "email") ? profile.email : ""}
+      />
+      <input
+        type="hidden"
+        name="phone"
+        value={fieldIsShared(profile, "phone") ? profile.phone ?? "" : ""}
+      />
+      <input
+        type="hidden"
+        name="photo"
+        value={fieldIsShared(profile, "photo") ? profile.photo ?? "" : ""}
+      />
+      <input
+        type="hidden"
+        name="company"
+        value={fieldIsShared(profile, "company") ? profile.company ?? "" : ""}
+      />
+      <input
+        type="hidden"
+        name="job_title"
+        value={fieldIsShared(profile, "job_title") ? profile.job_title ?? "" : ""}
+      />
+      <input type="hidden" name="website" value={website ?? ""} />
       {profile.sharedFields.map((field) => (
         <input key={field} type="hidden" name="shared_field" value={field} />
       ))}
@@ -600,7 +634,11 @@ export default function NearbyContactSharing({
                   </span>
                   <div>
                     <h2 className="text-balance font-display text-lg font-semibold text-foreground">
-                      You may have met {encounter.profile.full_name} at{" "}
+                      You may have met{" "}
+                      {fieldIsShared(encounter.profile, "name")
+                        ? encounter.profile.full_name
+                        : "someone nearby"}{" "}
+                      at{" "}
                       {formatEncounterTime(encounter.metAt)}
                     </h2>
                     <p className="mt-1 text-pretty text-sm text-muted-foreground">

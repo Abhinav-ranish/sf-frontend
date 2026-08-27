@@ -12,10 +12,11 @@ import {
   contactInputSchema,
   zodFieldErrors,
 } from "@/lib/contacts/schema";
-import type { FormState } from "@/lib/contacts/types";
+import type { Contact, FormState } from "@/lib/contacts/types";
 import {
   NEARBY_SHARE_FIELDS,
   nearbyProfileToContactInput,
+  qualifiesForEncounter,
   type NearbyShareField,
   type NearbySharedProfile,
 } from "@/lib/nearby/simulation";
@@ -41,6 +42,21 @@ function sharedFieldsFromFormData(formData: FormData): NearbyShareField[] {
     );
 }
 
+function numericValue(formData: FormData, name: string): number {
+  return Number(stringValue(formData, name));
+}
+
+function formHasQualifiedEncounter(formData: FormData): boolean {
+  const closeForMs = numericValue(formData, "close_for_ms");
+  const distanceMeters = numericValue(formData, "distance_meters");
+
+  return (
+    Number.isFinite(closeForMs) &&
+    Number.isFinite(distanceMeters) &&
+    qualifiesForEncounter({ closeForMs, distanceMeters })
+  );
+}
+
 function profileFromFormData(formData: FormData): NearbySharedProfile {
   const firstName = stringValue(formData, "first_name");
   const lastName = stringValue(formData, "last_name");
@@ -64,6 +80,13 @@ export async function saveNearbyEncounterAction(
   _prevState: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  if (!formHasQualifiedEncounter(formData)) {
+    return {
+      status: "error",
+      message: "This encounter has not qualified yet.",
+    };
+  }
+
   const profile = profileFromFormData(formData);
   const input = nearbyProfileToContactInput(
     profile,
@@ -79,11 +102,9 @@ export async function saveNearbyEncounterAction(
     };
   }
 
+  let saved: Contact;
   try {
-    const saved = await createContact(parsed.data);
-    revalidatePath("/contacts");
-    revalidatePath(`/contacts/${saved.id}`);
-    redirect(`/contacts/${saved.id}`);
+    saved = await createContact(parsed.data);
   } catch (error) {
     if (error instanceof ApiUnreachableError) {
       return { status: "error", message: UNREACHABLE };
@@ -112,4 +133,8 @@ export async function saveNearbyEncounterAction(
     }
     throw error;
   }
+
+  revalidatePath("/contacts");
+  revalidatePath(`/contacts/${saved.id}`);
+  redirect(`/contacts/${saved.id}`);
 }
